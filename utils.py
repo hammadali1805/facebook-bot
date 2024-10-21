@@ -18,8 +18,8 @@ def load_csv_file(file_path):
         next(csv_reader)  # Skip the header row
         for row in csv_reader:
             # Assuming the CSV columns are in the order: username, password, phone
-            username, password, phone = row
-            users.append((username, password, phone))
+            email, password= row
+            users.append((email, password))
     return users
 
 

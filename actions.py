@@ -9,7 +9,6 @@ import time
 import random
 import os
 import re 
-from utils import find_tweet
 
 def login(driver, email, password):
     """
@@ -37,8 +36,9 @@ def login(driver, email, password):
         password_field.send_keys(Keys.RETURN)
         
         time.sleep(3)
-
-        return True
+        print(driver.current_url)
+        if driver.current_url == "https://www.facebook.com/":                
+            return True
 
     except Exception as e:
         print(f"Error during login: {str(e)}")
