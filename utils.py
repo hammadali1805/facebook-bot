@@ -22,6 +22,17 @@ def load_csv_file(file_path):
             users.append((email, password))
     return users
 
+def load_member_file(file_path):
+    members = []
+    with open(file_path, mode='r') as file:
+        csv_reader = csv.reader(file)
+        next(csv_reader)  # Skip the header row
+        for row in csv_reader:
+            # Assuming the CSV columns are in the order: username, password, phone
+            name, id= row
+            members.append((name, id))
+    return members
+
 
 # def find_tweet(driver, tweet_url):
 #     """

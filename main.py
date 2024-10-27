@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from utils import load_csv_file, create_report, get_timestamp, get_filename, get_summary
+from utils import *
 from actions import *
 
 import google.generativeai as genai
@@ -33,7 +33,7 @@ def get_driver():
     return driver
 
 
-def perform_action(link, users, action=None, filename=None, comment=None, paraphrase=None, language=None, image_folder=None, swith_after=None):
+def perform_action(link, users, action=None, filename=None, comment=None, paraphrase=None, language=None, image_folder=None, swith_after=None, members=None):
         
     if len(users)==0:
         messagebox.showerror('Error', 'No CSV selected or empty CSV selected.')
@@ -72,7 +72,7 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
             if not found:
                 messagebox.showerror('Error', 'No user from the given csv is the member of the group.')
 
-        elif link.startswith('https://www.facebook.com/share/p/'):
+        elif link.startswith('https://www.facebook.com/share/p/') or link.startswith('https://www.facebook.com/share/v/'):
             driver = get_driver()
             for email, password in users:
                 if login(driver, email, password):
@@ -81,7 +81,6 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
                     if data:
                         try:
                             pd.DataFrame(data).to_csv(f'members/{filename}.csv', index=False)
-                            messagebox.showinfo('Success', f'Scraped {len(data["Id"])} users.')
                         except Exception as e:
                             messagebox.showerror('Unexpected Error', e)
                     else:
@@ -92,13 +91,13 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
                     print(f"Login Failed for {email}")
         
         else:
-            messagebox.showerror('Error', 'Invalid link! link must start with https://www.facebook.com/share/p/ or https://www.facebook.com/groups/')
+            messagebox.showerror('Error', 'Invalid link! link must start with https://www.facebook.com/share/p/ or https://www.facebook.com/groups/ or https://www.facebook.com/share/v/')
 
 
     if action=='like' or action=='comment':
 
-        if (not link.startswith('https://www.facebook.com/share/p/')):
-            messagebox.showerror('Error!', 'Provide proper link. Link should start with https://www.facebook.com/share/p/')
+        if not (link.startswith('https://www.facebook.com/share/p/') or link.startswith('https://www.facebook.com/share/v/')):
+            messagebox.showerror('Error!', 'Provide proper link. Link should start with https://www.facebook.com/share/p/ or https://www.facebook.com/share/v/')
             return 
         
         driver = get_driver()
@@ -106,14 +105,14 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
         report_name = get_filename()
         create_report(['Timestamp', 'PerformedBy', 'Action', 'PostLink', 'Status', 'Comment'], report_name)
 
-        for username, password, phone in users:
-            if login(driver, username, password, phone):
+        for email, password in users:
+            if login(driver, email, password):
 
                 if action == 'like':
                     if react_post(driver, link):
-                        create_report([get_timestamp(), username, action, link, 'Success', ''], report_name)
+                        create_report([get_timestamp(), email, action, link, 'Success', ''], report_name)
                     else:
-                        create_report([get_timestamp(), username, action, link, 'Failed', ''], report_name)
+                        create_report([get_timestamp(), email, action, link, 'Failed', ''], report_name)
 
                 elif action == 'comment':
                     if paraphrase:
@@ -122,22 +121,21 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
                         if new_comment:
 
                             if comment_post(driver, link, new_comment):
-                                create_report([get_timestamp(), username, action, link, 'Success', comment], report_name)
+                                create_report([get_timestamp(), email, action, link, 'Success', comment], report_name)
                             else:
-                                create_report([get_timestamp(), username, action, link, 'Failed', comment], report_name)
+                                create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
                         else:
-                            create_report([get_timestamp(), username, action, link, 'Failed', comment], report_name)
+                            create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
 
                     else:
                         if comment_post(driver, link, comment):
-                            create_report([get_timestamp(), username, action, link, 'Success', comment], report_name)
+                            create_report([get_timestamp(), email, action, link, 'Success', comment], report_name)
                         else:
-                            create_report([get_timestamp(), username, action, link, 'Failed', comment], report_name)
+                            create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
 
                 logout(driver)
-                # time.sleep(delay)
             else:
-                create_report([get_timestamp(), username, action, link, 'Failed', ''], report_name)
+                create_report([get_timestamp(), email, action, link, 'Failed', ''], report_name)
                 
         driver.quit()
         messagebox.showinfo("SUCCESS", f"Automation task has been completed.\n{get_summary(report_name)}")
@@ -252,6 +250,51 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
 
 
 
+    elif action=='message_friend':        
+        driver = get_driver()
+
+        report_name = get_filename()
+        create_report(['Timestamp', 'PerformedBy', 'Action', 'Friend Name', 'Status', 'Message'], report_name)
+
+        for email, password in users:
+            if login(driver, email, password):
+                friends = find_friends(driver)
+                if friends:
+
+                    for friend in friends:    
+                        if paraphrase:
+                            new_comment = paraphrase_content(model, comment, language).strip('\n')
+
+                            if new_comment:
+                                
+                                if message_user(driver, friend, new_comment):
+                                    create_report([get_timestamp(), email, action, friend, 'Success', comment], report_name)
+                                else:
+                                    create_report([get_timestamp(), email, action, friend, 'Failed', comment], report_name)
+                            else:
+                                create_report([get_timestamp(), email, action, friend, 'Failed', comment], report_name)
+
+                        else:
+                            if message_user(driver, friend, comment):
+                                create_report([get_timestamp(), email, action, friend, 'Success', comment], report_name)
+                            else:
+                                create_report([get_timestamp(), email, action, friend, 'Failed', comment], report_name)
+
+                else:
+                    create_report([get_timestamp(), email, action, friend, 'Failed', comment], report_name)
+
+                logout(driver)
+                # time.sleep(delay)
+            else:
+                create_report([get_timestamp(), email, action, friend, 'Failed', comment], report_name)        
+
+        driver.quit()
+        messagebox.showinfo("SUCCESS", f"Automation task has been completed.\n{get_summary(report_name)}")
+
+
+
+
+
     elif action=='post':
 
         if (not image_folder) and (not comment.strip(' ')):
@@ -331,12 +374,14 @@ class XAutomationApp(tk.Tk):
         # Tabs
         self.scrape_tab = ttk.Frame(self.notebook)
         self.post_action_tab = ttk.Frame(self.notebook)
-        self.account_tab = ttk.Frame(self.notebook)
+        self.friend_tab = ttk.Frame(self.notebook)
+        self.member_tab = ttk.Frame(self.notebook)
         self.post_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.scrape_tab, text="Scrape Users")
         self.notebook.add(self.post_action_tab, text="Post Actions")
-        self.notebook.add(self.account_tab, text="Account Actions")
+        self.notebook.add(self.friend_tab, text="Friend Actions")
+        self.notebook.add(self.member_tab, text="Member Actions")
         self.notebook.add(self.post_tab, text="Post")
 
         # --- Tweet Link Tab UI ---
@@ -346,7 +391,9 @@ class XAutomationApp(tk.Tk):
         self.create_post_actions_tab()
 
         # --- Account Tab UI ---
-        self.create_account_tab()
+        self.create_friend_tab()
+
+        self.create_member_tab()
 
         # --- Post Tweet Tab UI--
         self.create_post_tab()
@@ -365,23 +412,6 @@ class XAutomationApp(tk.Tk):
         ttk.Label(self.scrape_tab, text="File Name:").grid(row=2, column=0, padx=10, pady=10, sticky=tk.W)
         self.file_name = ttk.Entry(self.scrape_tab, width=40)
         self.file_name.grid(row=2, column=1, padx=10, pady=10)
-
-        # self.action_var = tk.StringVar(value="like")
-        # actions = ["like", "like", "retweet", "report", "comment"]
-        # self.action_dropdown = ttk.OptionMenu(self.scrape_tab, self.action_var, *actions, command=self.toggle_comment)
-        # self.action_dropdown.grid(row=2, column=1, padx=10, pady=10)
-
-        # self.comment_label = ttk.Label(self.scrape_tab, text="Comment:")
-        # self.comment_entry = ttk.Entry(self.scrape_tab, width=40)
-        # self.paraphrase_var = tk.IntVar()
-        # self.paraphrase_checkbox = ttk.Checkbutton(self.scrape_tab, text="Paraphrase", variable=self.paraphrase_var)
-        # self.language_var = tk.StringVar(value="English")
-        # self.language_dropdown = ttk.OptionMenu(self.scrape_tab, self.language_var, "English", "English", "Urdu", "Hindi", "Bengali")
-
-        # ttk.Label(self.scrape_tab, text="Delay (seconds):").grid(row=4, column=0, padx=10, pady=10, sticky=tk.W)
-        # self.delay_entry = ttk.Entry(self.scrape_tab, width=10)
-        # self.delay_entry.grid(row=4, column=1, padx=10, pady=10)
-        # self.delay_entry.insert(0, "1")
 
         ttk.Button(self.scrape_tab, text="Start", command=self.scrape_users).grid(row=5, column=1, padx=10, pady=10)
 
@@ -409,42 +439,62 @@ class XAutomationApp(tk.Tk):
         self.post_action_language_var = tk.StringVar(value="English")
         self.post_action_language_dropdown = ttk.OptionMenu(self.post_action_tab, self.post_action_language_var, "English", "English", "Urdu", "Hindi", "Bengali")
 
-        # ttk.Label(self.post_action_tab, text="Delay (seconds):").grid(row=4, column=0, padx=10, pady=10, sticky=tk.W)
-        # self.post_delay_entry = ttk.Entry(self.post_action_tab, width=10)
-        # self.post_delay_entry.grid(row=4, column=1, padx=10, pady=10)
-        # self.post_delay_entry.insert(0, "1")
-
         ttk.Button(self.post_action_tab, text="Start", command=self.start_post_actions).grid(row=4, column=1, padx=10, pady=10)
 
-    def create_account_tab(self):
+    def create_friend_tab(self):
         # Upload CSV button
-        ttk.Button(self.account_tab, text="Upload CSV", command=self.load_csv).grid(row=0, column=0, padx=10, pady=10)
-        self.csv_label_account = ttk.Label(self.account_tab, text="No file selected")
-        self.csv_label_account.grid(row=0, column=1, padx=10, pady=10)
+        ttk.Button(self.friend_tab, text="Upload CSV", command=self.load_csv).grid(row=0, column=0, padx=10, pady=10)
+        self.csv_label_friend = ttk.Label(self.friend_tab, text="No file selected")
+        self.csv_label_friend.grid(row=0, column=1, padx=10, pady=10)
         self.csv_users = []
 
-        ttk.Label(self.account_tab, text="Account Link:").grid(row=1, column=0, padx=10, pady=10, sticky=tk.W)
-        self.account_link = ttk.Entry(self.account_tab, width=40)
-        self.account_link.grid(row=1, column=1, padx=10, pady=10)
 
-        self.account_action_var = tk.StringVar(value="follow")
-        account_actions = ["follow", "follow", "report", "message"]
-        self.account_action_dropdown = ttk.OptionMenu(self.account_tab, self.account_action_var, *account_actions, command=self.toggle_message)
-        self.account_action_dropdown.grid(row=2, column=1, padx=10, pady=10)
+        self.friend_message_label = ttk.Label(self.friend_tab, text="Message:")
+        self.friend_message_entry = ttk.Entry(self.friend_tab, width=40)
+        self.friend_paraphrase_var = tk.IntVar()
+        self.friend_paraphrase_checkbox = ttk.Checkbutton(self.friend_tab, text="Paraphrase", variable=self.friend_paraphrase_var)
+        self.friend_language_var = tk.StringVar(value="English")
+        self.friend_language_dropdown = ttk.OptionMenu(self.friend_tab, self.friend_language_var, "English", "English", "Urdu", "Hindi", "Bengali")
+        self.friend_message_label.grid(row=1, column=0, padx=10, pady=10)
+        self.friend_message_entry.grid(row=1, column=1, padx=10, pady=10)
+        self.friend_paraphrase_checkbox.grid(row=1, column=2, padx=10, pady=10)
+        self.friend_language_dropdown.grid(row=1, column=3, padx=10, pady=10)
 
-        self.message_label = ttk.Label(self.account_tab, text="Message:")
-        self.message_entry = ttk.Entry(self.account_tab, width=40)
-        self.account_paraphrase_var = tk.IntVar()
-        self.account_paraphrase_checkbox = ttk.Checkbutton(self.account_tab, text="Paraphrase", variable=self.account_paraphrase_var)
-        self.account_language_var = tk.StringVar(value="English")
-        self.account_language_dropdown = ttk.OptionMenu(self.account_tab, self.account_language_var, "English", "English", "Urdu", "Hindi", "Bengali")
 
-        ttk.Label(self.account_tab, text="Delay (seconds):").grid(row=4, column=0, padx=10, pady=10, sticky=tk.W)
-        self.account_delay_entry = ttk.Entry(self.account_tab, width=10)
-        self.account_delay_entry.grid(row=4, column=1, padx=10, pady=10)
-        self.account_delay_entry.insert(0, "1")
+        ttk.Button(self.friend_tab, text="Start", command=self.start_friend_actions).grid(row=2, column=1, padx=10, pady=10)
 
-        ttk.Button(self.account_tab, text="Start", command=self.start_account_actions).grid(row=5, column=1, padx=10, pady=10)
+    def create_member_tab(self):
+        # Upload CSV button
+        ttk.Button(self.member_tab, text="Upload CSV", command=self.load_csv).grid(row=0, column=0, padx=10, pady=10)
+        self.csv_label_member = ttk.Label(self.member_tab, text="No file selected")
+        self.csv_label_member.grid(row=0, column=1, padx=10, pady=10)
+        self.csv_users = []
+
+        # Upload CSV button
+        ttk.Button(self.member_tab, text="Upload Members CSV", command=self.load_members).grid(row=1, column=0, padx=10, pady=10)
+        self.members_csv_label_member = ttk.Label(self.member_tab, text="No file selected")
+        self.members_csv_label_member.grid(row=1, column=1, padx=10, pady=10)
+        self.members = []
+
+        self.member_var = tk.StringVar(value="like")
+        member_actions = ["Friend", "Friend", "Message"]
+        self.member_dropdown = ttk.OptionMenu(self.member_tab, self.member_var, *member_actions, command=self.toggle_member_comment)
+        self.member_dropdown.grid(row=2, column=1, padx=10, pady=10)
+
+        # Comment feature in post tab
+        self.member_comment_label = ttk.Label(self.member_tab, text="Message:")
+        self.member_comment_entry = ttk.Entry(self.member_tab, width=40)
+        self.member_paraphrase_var = tk.IntVar()
+        self.member_paraphrase_checkbox = ttk.Checkbutton(self.member_tab, text="Paraphrase", variable=self.member_paraphrase_var)
+        self.member_language_var = tk.StringVar(value="English")
+        self.member_language_dropdown = ttk.OptionMenu(self.member_tab, self.member_language_var, "English", "English", "Urdu", "Hindi", "Bengali")
+
+        ttk.Label(self.member_tab, text="Switch After:").grid(row=4, column=0, padx=10, pady=10)
+        self.switch_after_entry_member = ttk.Entry(self.member_tab, width=10)
+        self.switch_after_entry_member.grid(row=4, column=1, padx=10, pady=10)
+        self.switch_after_entry_member.insert(0, "5")
+
+        ttk.Button(self.member_tab, text="Start", command=self.start_member_actions).grid(row=5, column=1, padx=10, pady=10)
 
     def create_post_tab(self):
         # Upload CSV button
@@ -452,15 +502,6 @@ class XAutomationApp(tk.Tk):
         self.csv_label_post = ttk.Label(self.post_tab, text="No file selected")
         self.csv_label_post.grid(row=0, column=1, padx=10, pady=10)
         self.csv_users = []
-
-        # ttk.Label(self.account_tab, text="Account Link:").grid(row=1, column=0, padx=10, pady=10, sticky=tk.W)
-        # self.account_link = ttk.Entry(self.account_tab, width=40)
-        # self.account_link.grid(row=1, column=1, padx=10, pady=10)
-
-        # self.account_action_var = tk.StringVar(value="follow")
-        # account_actions = ["follow", "follow", "report", "message"]
-        # self.account_action_dropdown = ttk.OptionMenu(self.account_tab, self.account_action_var, *account_actions, command=self.toggle_message)
-        # self.account_action_dropdown.grid(row=2, column=1, padx=10, pady=10)
 
         self.post_message_label = ttk.Label(self.post_tab, text="Message:")
         self.post_message_entry = ttk.Entry(self.post_tab, width=40)
@@ -481,24 +522,8 @@ class XAutomationApp(tk.Tk):
         tk.Button(self.post_tab, text="X", command=self.remove_image_folder).grid(row=2, column=2, padx=10, pady=10)
 
 
-        # ttk.Label(self.post_tab, text="Delay (seconds):").grid(row=3, column=0, padx=10, pady=10, sticky=tk.W)
-        # self.post_delay_entry = ttk.Entry(self.post_tab, width=10)
-        # self.post_delay_entry.grid(row=3, column=1, padx=10, pady=10)
-        # self.post_delay_entry.insert(0, "1")
-
         ttk.Button(self.post_tab, text="Start", command=self.start_posting).grid(row=3, column=1, padx=10, pady=10)
 
-    def toggle_comment(self, *args):
-        if self.action_var.get() == "comment":
-            self.comment_label.grid(row=3, column=0, padx=10, pady=10)
-            self.comment_entry.grid(row=3, column=1, padx=10, pady=10)
-            self.paraphrase_checkbox.grid(row=3, column=2, padx=10, pady=10)
-            self.language_dropdown.grid(row=3, column=3, padx=10, pady=10)
-        else:
-            self.comment_label.grid_forget()
-            self.comment_entry.grid_forget()
-            self.paraphrase_checkbox.grid_forget()
-            self.language_dropdown.grid_forget()
 
     def toggle_post_comment(self, *args):
         if self.post_action_var.get() == "comment":
@@ -512,17 +537,17 @@ class XAutomationApp(tk.Tk):
             self.post_action_paraphrase_checkbox.grid_forget()
             self.post_action_language_dropdown.grid_forget()
 
-    def toggle_message(self, *args):
-        if self.account_action_var.get() == "message":
-            self.message_label.grid(row=3, column=0, padx=10, pady=10)
-            self.message_entry.grid(row=3, column=1, padx=10, pady=10)
-            self.account_paraphrase_checkbox.grid(row=3, column=2, padx=10, pady=10)
-            self.account_language_dropdown.grid(row=3, column=3, padx=10, pady=10)
+    def toggle_member_comment(self, *args):
+        if self.member_var.get() == "Message":
+            self.member_comment_label.grid(row=3, column=0, padx=10, pady=10)
+            self.member_comment_entry.grid(row=3, column=1, padx=10, pady=10)
+            self.member_paraphrase_checkbox.grid(row=3, column=2, padx=10, pady=10)
+            self.member_language_dropdown.grid(row=3, column=3, padx=10, pady=10)
         else:
-            self.message_label.grid_forget()
-            self.message_entry.grid_forget()
-            self.account_paraphrase_checkbox.grid_forget()
-            self.account_language_dropdown.grid_forget()
+            self.member_comment_label.grid_forget()
+            self.member_comment_entry.grid_forget()
+            self.member_paraphrase_checkbox.grid_forget()
+            self.member_language_dropdown.grid_forget()
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -530,10 +555,19 @@ class XAutomationApp(tk.Tk):
             self.csv_users = load_csv_file(file_path)  # You can update this to actually load the CSV content.
             self.csv_label_post_action.config(text=file_path)  # Update label with the file path
             self.csv_label_post.config(text=file_path)  # Update label with the file path
-            self.csv_label_account.config(text=file_path)  # Update label with the file path
+            self.csv_label_friend.config(text=file_path)  # Update label with the file path
+            self.csv_label_member.config(text=file_path)  # Update label with the file path
             self.csv_label_scrape.config(text=file_path)  # Update label with the file path
         else:
             self.csv_label_scrape.config(text="No file selected")
+
+    def load_members(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            self.members = load_member_file(file_path)  # You can update this to actually load the CSV content.
+            self.members_csv_label_member.config(text=file_path)  # Update label with the file path
+        else:
+            self.members_csv_label_member.config(text="No file selected")        
 
     def load_image_folder(self):
         folder_path = filedialog.askdirectory()  # Ask the user to select a directory
@@ -554,47 +588,43 @@ class XAutomationApp(tk.Tk):
         perform_action(link, users, action='scrape_users', filename=file_name)
             
 
-    # def start_tweet_actions(self):
-    #     tweet_link = self.tweet_link.get()
-    #     action = self.action_var.get()
-    #     comment = self.comment_entry.get() if action == "comment" else None
-    #     paraphrase = bool(self.paraphrase_var.get())
-    #     language = self.language_var.get()
-    #     try:
-    #         delay = int(self.delay_entry.get())
-    #     except:
-    #         messagebox.showerror('Error', 'Choose an integer for delay.')
-    #         return
-    #     users = self.csv_users
-    #     perform_action(action, tweet_link=tweet_link, comment=comment, paraphrase=paraphrase, language=language, delay=delay, users=users, task_type='link')
-
     def start_post_actions(self):
         post = self.link_entry_post_action.get()
         action = self.post_action_var.get()
         comment = self.post_action_comment_entry.get() if action == "comment" else None
         paraphrase = bool(self.post_action_paraphrase_var.get())
         language = self.post_action_language_var.get()
-        # try:
-        #     delay = int(self.delay_entry.get())
-        # except:
-        #     messagebox.showerror('Error', 'Choose an integer for delay.')
-        #     return
+
         users = self.csv_users
         perform_action(link=post, users=users, action=action, comment=comment, paraphrase=paraphrase, language=language)
 
-    def start_account_actions(self):
-        account_link = self.account_link.get()
-        action = self.account_action_var.get()
-        message = self.message_entry.get() if action == "message" else None
-        paraphrase = bool(self.account_paraphrase_var.get())
-        language = self.account_language_var.get()
-        try:
-            delay = int(self.delay_entry.get())
-        except:
-            messagebox.showerror('Error', 'Choose an integer for delay.')
-            return
+    def start_friend_actions(self):
+        message = self.friend_message_entry.get()
+        paraphrase = bool(self.friend_paraphrase_var.get())
+        language = self.friend_language_var.get()
         users = self.csv_users
-        perform_action(action, tweet_link=account_link, comment=message, paraphrase=paraphrase, language=language, delay=delay, users=users, task_type='account')
+        perform_action(link=None, users=users, action='message_friend', filename=None, comment=message, paraphrase=paraphrase, language=language, image_folder=None, swith_after=None)
+
+    def start_member_actions(self):
+        members = self.members
+        users = self.csv_users
+
+        action = self.member_var.get()
+
+        try:
+            switch_after = int(self.switch_after_entry_member.get())
+        except:
+            messagebox.showerror('Error', 'Invalid value for switch after!')        
+            return
+        
+        if action=="Friend":
+            perform_action(link=None, users=users, action='friend_member', filename=None, comment=None, paraphrase=None, language=None, image_folder=None, swith_after=switch_after, members=members)
+        else:
+            message = self.member_comment_entry.get()
+            paraphrase = bool(self.member_paraphrase_var.get())
+            language = self.member_language_var.get()
+
+            perform_action(link=None, users=users, action='message_member', filename=None, comment=message, paraphrase=paraphrase, language=language, image_folder=None, swith_after=switch_after, members=members)
 
     def start_posting(self):
         message = self.post_message_entry.get()
@@ -602,11 +632,6 @@ class XAutomationApp(tk.Tk):
         language = self.post_language_var.get()
         image_folder = self.image_folder
 
-        # try:
-        #     delay = int(self.delay_entry.get())
-        # except:
-        #     messagebox.showerror('Error', 'Choose an integer for delay.')
-        #     return
         users = self.csv_users
         perform_action(link=None, users=users, action='post', comment=message, paraphrase=paraphrase, language=language, image_folder=image_folder)
 

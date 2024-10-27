@@ -37,7 +37,7 @@ def login(driver, email, password):
         
         time.sleep(3)
         print(driver.current_url)
-        if driver.current_url == "https://www.facebook.com/":                
+        if driver.current_url == "https://www.facebook.com/" or driver.current_url=="https://www.facebook.com/?sk=welcome":                
             return True
 
     except Exception as e:
@@ -323,11 +323,13 @@ def message_user(driver, user_profile_url, message_text):
         send_button = driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Press Enter to send"]')
         send_button.click()
         time.sleep(2)
+        driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Close chat"]').click()
+        time.sleep(2)
         return True
     
     except Exception as e:
         print(f"Error while messaging user: {str(e)}")
-        return True
+        return False
 
 
 # def report_user(driver, user_profile_url):
