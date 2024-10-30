@@ -35,9 +35,24 @@ def login(driver, email, password):
         password_field.send_keys(password)
         password_field.send_keys(Keys.RETURN)
         
+
+        if driver.current_url.startswith('https://www.facebook.com/checkpoint'):
+            account_button = driver.find_element(By.CSS_SELECTOR, 'div[aria-label="More options"]')
+            account_button.click()
+            time.sleep(1)
+
+            logout_button_path = "//div[@role='button'][.//span[text()='Log out']]"
+
+            logout_button = driver.find_element(By.XPATH, logout_button_path)
+            logout_button.click()
+            time.sleep(1)
+
+            driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Log out"]').click()
+            return False
+        
+
         time.sleep(3)
-        print(driver.current_url)
-        if driver.current_url == "https://www.facebook.com/" or driver.current_url=="https://www.facebook.com/?sk=welcome":                
+        if driver.current_url in ["https://www.facebook.com/", "https://www.facebook.com/?sk=welcome", "https://www.facebook.com/?sk=welcome&lsrc=lb"] :                
             return True
 
     except Exception as e:
@@ -63,7 +78,8 @@ def logout(driver):
         account_button.click()
         time.sleep(1)
 
-        logout_button_path = "/html/body/div[1]/div/div[1]/div/div[2]/div[5]/div[2]/div/div/div[1]/div[1]/div/div/div/div/div/div/div/div/div/div[1]/div/div/div[1]/div[2]/div/div[5]/div"
+        logout_button_path = "//div[@role='button'][.//span[text()='Log out']]"
+
         logout_button = driver.find_element(By.XPATH, logout_button_path)
         logout_button.click()
 
@@ -88,7 +104,10 @@ def react_post(driver, post_url):
         #     time.sleep(1)
             # driver.find_element(By.CSS_SELECTOR, f'div[aria-label="{reaction}"]').click()
 
-        driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Like"]').click()
+        try:
+            driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Like"]').click()
+        except:
+            driver.find_elements(By.CSS_SELECTOR, 'div[aria-label="Like"]')[1].click()
         time.sleep(2)
         return True
     except Exception as e:
@@ -117,7 +136,7 @@ def checkMember(driver, group_link):
     
 
 def groupMembers(driver, group_link):
-    members_url = group_link + "/members"
+    members_url = group_link.rstrip('/') + "/members"
     driver.get(members_url)
     time.sleep(3)
 
@@ -137,7 +156,7 @@ def groupMembers(driver, group_link):
                     user_id = match.group(1) if match else None
 
                     if name and user_id and not re.search(r'\b0 points\b', name, re.IGNORECASE):
-                        members.add((name, user_id))
+                        members.add((name, 'https://www.facebook.com/'+user_id))
 
                 except StaleElementReferenceException:
                     # If a member element becomes stale, simply continue to the next one
@@ -164,55 +183,64 @@ def groupMembers(driver, group_link):
     else:
         return False
 
-# def postMembers(driver, post_link):
-#     driver.get(post_link)
-#     time.sleep(3)
-#     reactions_path = "/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div/div/div/div/div/div/div/div/div/div/div/div/div[13]/div/div/div[4]/div/div/div[1]/div/div[1]/div/div[1]/div/span/div"
-#     driver.find_elements(By.XPATH, reactions_path).click()
-#     time.sleep(2)
+def postMembers(driver, post_link):
+    try:
+        driver.get(post_link)
+        time.sleep(3)
 
-#     members = set()
+        reactions_path = "//div[@role='button'][.//div[text()='All reactions:']]"
+        try:
+            driver.find_element(By.XPATH, reactions_path).click()
+        except:
+            driver.find_elements(By.XPATH, reactions_path)[1].click()
 
-#     while True:
-#         try:
-#             member_elements = driver.find_elements(By.XPATH, "//a[@role='link']")
-#             current_member_count = len(members)
+        time.sleep(2)
 
-#             for member in member_elements:
-#                 try:
-#                     name = member.text.strip()
-#                     username = member.get_attribute("href")
+        members = set()
 
-#                     match = re.search(r'user/(\d+)', username)
-#                     user_id = match.group(1) if match else None
+        while True:
+            dialog_path = "//div[@role='dialog'][.//div[starts-with(@aria-label, 'All,')]]/div/div/div/div[2]/div[2]/div/div"
+            try:
+                link_path = "//div[@role='dialog'][.//div[starts-with(@aria-label, 'All,')]]//a[@role='link']"
+                member_elements = driver.find_elements(By.XPATH, link_path)
+                current_member_count = len(members)
+                for member in member_elements:
+                    name = member.text 
+                    if name:
+                        name=name.strip()
+                    username = member.get_attribute("href")
+                    if username.find("id=")!=-1:
+                        user_id = username.split('?')[1].split('&')[0].replace('id=', '')
+                        user_id = 'https://www.facebook.com/' + user_id
+                    else:
+                        user_id = username.split('?')[0]
 
-#                     if name and user_id and not re.search(r'\b0 points\b', name, re.IGNORECASE):
-#                         members.add((name, user_id))
+                    if name and user_id:
+                        members.add((name, user_id))
 
-#                 except StaleElementReferenceException:
-#                     # If a member element becomes stale, simply continue to the next one
-#                     continue
+                # Scroll down to load more members
+                dialog = driver.find_element(By.XPATH, dialog_path)
+                driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", dialog)
+                time.sleep(3)
 
-#             # Scroll down to load more members
-#             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-#             time.sleep(3)
+                # Check if new members were found
+                new_member_count = len(members)
+                if new_member_count == current_member_count:
+                    print("No new members found. Stopping scroll.")
+                    break
 
-#             # Check if new members were found
-#             new_member_count = len(members)
-#             if new_member_count == current_member_count:
-#                 print("No new members found. Stopping scroll.")
-#                 break
+            except Exception as e:
+                print(f"Error finding members: {e}")
+                break
 
-#         except Exception as e:
-#             print(f"Error finding members: {e}")
-#             break
-
-#     if members:
-#         names, ids = zip(*members)
-#         data = {"Name": names, "Id": ids}
-#         return data
-#     else:
-#         return False
+        if members:
+            names, ids = zip(*members)
+            data = {"Name": names, "Id": ids}
+            return data
+        else:
+            return False
+    except:
+        return False
 
 
 
@@ -222,7 +250,11 @@ def comment_post(driver, post_url, comment_text):
         driver.get(post_url)
         time.sleep(2)
 
-        driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Leave a comment"]').click()
+        try:
+            driver.find_element(By.CSS_SELECTOR, 'div[aria-label="Leave a comment"]').click()
+        except:
+            driver.find_elements(By.CSS_SELECTOR, 'div[aria-label="Leave a comment"]')[1].click()
+
         time.sleep(1)
 
         driver.find_element(By.CSS_SELECTOR, 'div[role="textbox"]').send_keys(comment_text)
@@ -289,7 +321,7 @@ def comment_post(driver, post_url, comment_text):
 #         return False
 
 
-def follow_user(driver, user_profile_url):
+def friend_user(driver, user_profile_url):
     try:
         driver.get(user_profile_url)
         time.sleep(2)  # Let the page load
@@ -411,11 +443,12 @@ def post(driver, message, folder_path=None):
         driver.get("https://facebook.com")
         time.sleep(2)
 
-        post_box_path = "/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div/div[2]/div/div/div/div[2]/div/div[2]/div/div/div/div[1]/div"
+        post_box_path = "//div[@role='button'][.//span[starts-with(text(), \"What's on your mind, \")]]"
         # Click on the Tweet button to open the tweet modal
         post_box = driver.find_element(By.XPATH, post_box_path)
         post_box.click()
         time.sleep(5)
+                
 
         text_box = driver.find_element(By.CSS_SELECTOR, 'div[role="textbox"]')
         # Type the tweet message

@@ -76,11 +76,11 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
             driver = get_driver()
             for email, password in users:
                 if login(driver, email, password):
-                    # data = groupMembers(driver, link)
-                    data = ''
+                    data = postMembers(driver, link)
                     if data:
                         try:
                             pd.DataFrame(data).to_csv(f'members/{filename}.csv', index=False)
+                            messagebox.showinfo('Success', f'Scraped {len(data["Id"])} users.')
                         except Exception as e:
                             messagebox.showerror('Unexpected Error', e)
                     else:
@@ -140,114 +140,80 @@ def perform_action(link, users, action=None, filename=None, comment=None, paraph
         driver.quit()
         messagebox.showinfo("SUCCESS", f"Automation task has been completed.\n{get_summary(report_name)}")
 
-    # elif task_type=='post':
 
-    #     if login(driver, users[0][0], users[0][1], users[0][2]):
-    #         tweets = find_tweets(driver, tweet_link, len(users))
-    #         logout(driver)
+    elif action=='friend_member':
+        if not members:
+            messagebox.showerror('Error!', 'Please provide members')
+            return
+        
+        driver = get_driver()
 
-    #         if tweets:
-    #             for tweet, (username, password, phone) in zip(tweets, users):
+        report_name = get_filename()
+        create_report(['Timestamp', 'PerformedBy', 'Action', 'PerformedOn', 'Status'], report_name)
 
-    #                 if login(driver, username, password, phone):
+        i = 0
+        for email, password in users:
+            if login(driver, email, password):
+                links = [x[1] for x in members]
+                for link in links[i:]:
+                    if friend_user(driver, link):
+                        create_report([get_timestamp(), email, action, link, 'Success'], report_name)
+                    else:
+                        create_report([get_timestamp(), email, action, link, 'Failed'], report_name)
+                    i+=1
+                    if i%(swith_after)==0:
+                        break    
+                logout(driver)
+                # time.sleep(delay)
+            else:
+                create_report([get_timestamp(), email, action, 'Login', 'Failed'], report_name)        
 
-    #                     if action == 'like':
-    #                         if like_tweet(driver, tweet):
-    #                             create_report([get_timestamp(), username, action, tweet, 'Sucess', ''], report_name)
-    #                         else:
-    #                             create_report([get_timestamp(), username, action, tweet, 'Failed',  ''], report_name)
-
-
-    #                     elif action == 'retweet':                    
-    #                         if retweet_tweet(driver, tweet):
-    #                             create_report([get_timestamp(), username, action, tweet, 'Success', ''], report_name)
-    #                         else:
-    #                             create_report([get_timestamp(), username, action, tweet, 'Failed', ''], report_name)
-
-
-
-    #                     elif action == 'report':                    
-    #                         if report_tweet(driver, tweet):
-    #                             create_report([get_timestamp(), username, action, tweet, 'Success', ''], report_name)
-    #                         else:
-    #                             create_report([get_timestamp(), username, action, tweet, 'Failed', ''], report_name)
-
-
-    #                     elif action == 'comment':
-    #                         if paraphrase:
-
-    #                             new_comment = paraphrase_content(model, comment, language).strip('\n')
-
-    #                             if new_comment:
-
-    #                                 if comment_tweet(driver, tweet, new_comment):
-    #                                     create_report([get_timestamp(), username, action, tweet, 'Success', comment], report_name)
-    #                                 else:
-    #                                     create_report([get_timestamp(), username, action, tweet, 'Failed', comment], report_name)
-
-    #                             else:
-    #                                 create_report([get_timestamp(), username, action, tweet, 'Failed', comment], report_name)
-
-    #                         else:
-
-    #                             if comment_tweet(driver, tweet, comment):
-    #                                 create_report([get_timestamp(), username, action, tweet, 'Success', comment], report_name)
-    #                             else:
-    #                                 create_report([get_timestamp(), username, action, tweet, 'Failed', comment], report_name)
-
-    #                     logout(driver)
-    #                     time.sleep(delay)
-    #                 else:
-    #                     create_report([get_timestamp(), username, action, tweet, 'Failed', ''], report_name)
-    #         else:
-    #             messagebox.showerror("Error", 'Unable to fetch tweets related to post. Please try again.')
-    #     else:
-    #         messagebox.showerror("Error", 'Unable to fetch tweets related to post. Please try again.')
-
-    # elif task_type=='account':
-
-    #     for username, password, phone in users:
-    #         if login(driver, username, password, phone):
-
-    #             if action == 'follow':
-    #                 if follow_user(driver, tweet_link):
-    #                     create_report([get_timestamp(), username, action, tweet_link, 'Success', ''], report_name)
-    #                 else:
-    #                     create_report([get_timestamp(), username, action, tweet_link, 'Failed', ''], report_name)
+        driver.quit()
+        messagebox.showinfo("SUCCESS", f"Automation task has been completed.\n{get_summary(report_name)}")        
 
 
-    #             elif action == 'report':                    
-    #                 if report_user(driver, tweet_link):
-    #                     create_report([get_timestamp(), username, action, tweet_link, 'Success', ''], report_name)
-    #                 else:
-    #                     create_report([get_timestamp(), username, action, tweet_link, 'Failed', ''], report_name)
+    elif action=='message_member':
+        if not members:
+            messagebox.showerror('Error!', 'Please provide members')
+            return
+        
+        driver = get_driver()
 
+        report_name = get_filename()
+        create_report(['Timestamp', 'PerformedBy', 'Action', 'PerformedOn', 'Status', 'Message'], report_name)
 
-    #             elif action == 'message':
-    #                 if paraphrase:
-    #                     new_comment = paraphrase_content(model, comment, language).strip('\n')
+        i=0
+        for email, password in users:
+            if login(driver, email, password):
+                links = [x[1] for x in members]
+                for link in links[i:]:
+                    if paraphrase:
+                        new_comment = paraphrase_content(model, comment, language).strip('\n')
 
-    #                     if new_comment:
+                        if new_comment:
                             
-    #                         if message_user(driver, tweet_link, new_comment):
-    #                             create_report([get_timestamp(), username, action, tweet_link, 'Success', comment], report_name)
-    #                         else:
-    #                             create_report([get_timestamp(), username, action, tweet_link, 'Failed', comment], report_name)
+                            if message_user(driver, link, new_comment):
+                                create_report([get_timestamp(), email, action, link, 'Success', comment], report_name)
+                            else:
+                                create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
+                        else:
+                            create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
 
-    #                     else:
-    #                         create_report([get_timestamp(), username, action, tweet_link, 'Failed', comment], report_name)
+                    else:
+                        if message_user(driver, link, comment):
+                            create_report([get_timestamp(), email, action, link, 'Success', comment], report_name)
+                        else:
+                            create_report([get_timestamp(), email, action, link, 'Failed', comment], report_name)
+                    i+=1
+                    if i%swith_after==0:
+                        break
+                logout(driver)
+                # time.sleep(delay)
+            else:
+                create_report([get_timestamp(), email, action, '', 'Failed', 'Login Failed'], report_name)        
 
-    #                 else:
-    #                     if message_user(driver, tweet_link, comment):
-    #                         create_report([get_timestamp(), username, action, tweet_link, 'Success', comment], report_name)
-    #                     else:
-    #                         create_report([get_timestamp(), username, action, tweet_link, 'Failed', comment], report_name)
-
-    #             logout(driver)
-    #             time.sleep(delay)
-    #         else:
-    #             create_report([get_timestamp(), username, action, tweet_link, 'Failed', ''], report_name)
-
+        driver.quit()
+        messagebox.showinfo("SUCCESS", f"Automation task has been completed.\n{get_summary(report_name)}")        
 
 
     elif action=='message_friend':        

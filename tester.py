@@ -7,8 +7,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import pandas as pd
-from actions import login, logout, react_post, groupMembers, postMembers, comment_post, follow_user, message_user, post, find_friends
-from utils import find_tweets
+from actions import *
+from utils import *
 
 # Initialize WebDriver
 def get_driver():
@@ -23,13 +23,14 @@ def get_driver():
 def test_actions(driver):
     # Example usage:
     email = "hammadalipbt18@gmail.com"
-    password = ''
+    password = '!4jKMp@TkAJ2kMc'
 
     # Login
     if login(driver, email, password):
         try:
             # Example actions
             post_url = "https://www.facebook.com/share/p/sfipcTaZ791peN4W/"
+            post_url = "https://www.facebook.com/share/p/qytVDD8Szj2JyDMS/"
             # user_profile_url = "https://x.com/TheEVuniverse"
             # keyword = "marvel fans"
             # message_text = "Hello!"
@@ -38,7 +39,7 @@ def test_actions(driver):
             # tweets = find_tweets(driver, keyword, 50)
             # print(len(tweets))
             # like_post(driver, post_url)
-            print(comment_post(driver, post_url, "Hi!"))
+            print(postMembers(driver, post_url))
             # data = postMembers(driver, post_url)
             # pd.DataFrame(data).to_csv('members.csv', index=False)
             # retweet_tweet(driver, tweet_url)
